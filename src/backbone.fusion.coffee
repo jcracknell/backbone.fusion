@@ -14,7 +14,6 @@ class Binder
 
 	_bindViewToModel = (model) ->
 		model.on 'change', _onModelChange, this
-		console.log "Should have bound view to model..."
 	
 	_onModelChange = ->
 		console.log "Fusion is aware that a model changed occurred."
