@@ -1,3 +1,3 @@
-= Backbone.Fusion =
+# Backbone.Fusion
 
-Two-way model binding for backbone again
+Two-way model binding for backbone again.
