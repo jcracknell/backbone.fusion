@@ -1,4 +1,6 @@
-root = exports ? window
+__namespace = exports ? window
+__namespace = __namespace.Backbone or throw 'Include backbone.js before backbone.fusion.js'
+__namespace = __namespace.Fusion = { }
 
 class Binder
 
@@ -11,14 +13,6 @@ class Binder
 		@config = config || {}
 		@model = view.model
 		@_bindViewToModel(@model)
-
-	getValue: ->
-		throw 'not implemented'
-
-	setValue: ->
-		throw 'not implemented'
-
-	sources: (e) -> false
 
 	_bindViewToModel: -> @model.on 'change', @_onModelChange, this
 
@@ -33,4 +27,4 @@ class Binder
 		console.log "Fusion is aware that an el changed occurred."
 
 # Attach an uninstantiated binder to the global Backbone object
-root.Backbone.Fusion = Binder
+__namespace.Binder = Binder
