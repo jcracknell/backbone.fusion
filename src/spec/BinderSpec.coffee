@@ -11,6 +11,7 @@ CatModel = @Backbone.Model.extend
 		name: ''
 		age: 0
 		color: ''
+		notes: ''
 
 describe 'Backbone.Fusion.Binder', ->
 	beforeEach ->
@@ -56,4 +57,17 @@ describe 'Backbone.Fusion.Binder', ->
 				element.value = '12'
 				$(element).change()
 				expect(model.get('age')).toEqual('12')
+		describe '<textarea/>', ->
+			beforeEach ->
+				element = document.createElement 'textarea'
+				element.setAttribute 'data-binding', 'notes'
+				binder.bind model, element
+			it 'should update the form element when the model changes', ->	
+				model.set notes: 'has no name'
+				expect(element.value).toEqual('has no name')
+			it 'should update the model when the form element changes', ->
+				element.value = 'tends to shed'
+				$(element).change()
+				expect(model.get 'notes').toEqual('tends to shed')
+
 				

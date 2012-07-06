@@ -9,7 +9,8 @@ $(function() {
 		defaults: function() { return {
 			'name': '',
 			'age': 0,
-			'description': ''
+			'description': '',
+			'notes': ''
 		} },
 		initialize: function() {
 		}
@@ -25,7 +26,7 @@ $(function() {
 	});
 
 	var cat = new Sandbox.Models.Cat();
-	cat.set({ name: 'Mr. Whiskers', description: 'lovely', age: 8 });
+	cat.set({ name: 'Mr. Whiskers', description: 'lovely', age: 8, notes: 'Foul temperament.' });
 	var catView = new Sandbox.Views.CatView({ model: cat });
 	$('body').append(catView.el);
 });

@@ -94,9 +94,16 @@ __namespace.BindingHelpers = BindingHelpers = do ->
 	binders = [
 		{
 			selector: Selector.Compile
-				$tag: 'input'
-				'@data-binding': $defined: yes
-				'@type': $any: [ 'hidden', 'text', 'search', 'url', 'telephone', 'email', 'password', 'range', 'color' ]
+				$any: [
+					{
+						$tag: 'input'
+						'@data-binding': $defined: yes
+						'@type': $any: [ 'hidden', 'text', 'search', 'url', 'telephone', 'email', 'password', 'range', 'color' ]
+					}, {
+						$tag: 'textarea'
+						'@data-binding': $defined: yes
+					}
+				]	
 			bind: (element) ->
 				attribute = element.getAttribute('data-binding')
 				return new InputValueBinding(element, attribute)

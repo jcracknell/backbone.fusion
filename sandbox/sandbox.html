@@ -10,9 +10,11 @@
 				<p>
 					My {{description}} cat is named {{name}}. It is {{age}} years old.
 				</p>
+				<p>{{notes}}</p>
 				<p>
 					My <input type="text" data-binding="description"/> cat is named <input type="text" data-binding="name"/>.
 					It is <input type="text" data-binding="age"/> years old.
+					<textarea data-binding="notes"></textarea>
 				</p>
 				<div>
 					<label>Name</label>
@@ -26,6 +28,10 @@
 					<label>Description</label>
 					<input type="text" data-binding="description"/>
 				</div>	
+				<div>
+					<label>Notes</label>
+					<textarea data-binding="notes"></textarea>
+				</div>
 			</div>
 		</script>
 		<script type="text/javascript" src="app.js"></script>
