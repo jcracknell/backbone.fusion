@@ -5,7 +5,12 @@ __namespace = __namespace.Fusion = { }
 # converts 'trueish' values to true and 'falsey' values to false
 affirm = (expr) -> if expr then yes else no
 
-Selector = do ->
+kvp = (k, v) ->
+	p = { }
+	p[k] = v
+	return p
+
+__namespace.Selector = Selector = do ->
 	opCompilers = # selector operation definitions
 		# { $all: [ s1, s2 ] } matches when s1 and s2 match
 		$all: (body) ->
@@ -43,26 +48,21 @@ Selector = do ->
 			return (candidate) ->
 				throw '$tag expects candidate dom element' unless _.isElement(candidate)
 				return compiledSelector(candidate.tagName.toLowerCase())
-	Create: (op, body) ->
-		selector = { }
-		selector[op] = body
-		return selector
-	Unpack: (selector) -> return [op, body] for op, body of selector
-	# used to dynamically create a selector object
-	InCanonicalForm: (selector) ->
+	unpack = (selector) -> return [op, body] for op, body of selector
+	canonicalForm = (selector) ->
 		if _.isString(selector)	
 			# 'string' -> { $seq: 'string' }
 			return { $seq: selector }
 		if _.isObject(selector)
 			# { $op1: s1, $op2: s2 } -> { $all: [ { $op1: s1 }, { $op2: s2 } ] }
-			selector = { $all: (Selector.Create opname, body for opname, body of selector) }
+			selector = { $all: (kvp opname, body for opname, body of selector) }
 			if 1 is selector.$all.length
 				# { $all: [ { $op: s } ] } -> { $op: s }
 				selector = selector.$all[0]
 			return selector
 		return selector	
 	Compile: (selector) ->
-		[op, body] = Selector.Unpack Selector.InCanonicalForm selector
+		[op, body] = unpack canonicalForm selector
 		if match = op.match(/^@([a-z][a-z-]*)$/)
 			attributeName = match[1]
 			compiledBody = Selector.Compile body
@@ -74,35 +74,107 @@ Selector = do ->
 			throw "invalid selector operation #{op}" unless opCompiler?
 			return opCompiler(body)
 
-class Binding
+__namespace.Binding = class Binding
 	pull: -> throw 'not implemented'
-	push: (attributes) -> throw 'not implemented'
+	push: (model) -> throw 'not implemented'
 	sources: (e) -> throw 'not implemented'
 
-class Binder
+__namespace.InputValueBinding = class InputValueBinding extends Binding
+	constructor: (@inputElement, @attribute) ->
+		@inputElement.value = ''
+	pull: -> kvp @attribute, @inputElement.value
+	push: (model) -> @inputElement.value = model[@attribute]
+	sources: (e) -> e.target is @inputElement	
 
-	VERSION: "0.0.1"
+__namespace.CheckboxBinding = class CheckboxBinding extends Binding	
+	constructor: (@inputElement, @attribute) ->
+	sources: (e) -> e.target is @inputElement	
 
-	constructor: (view, config) ->
-		throw 'You must pass in a view.' unless view
+__namespace.BindingHelpers = BindingHelpers = do ->
+	binders = [
+		{
+			selector: Selector.Compile
+				$tag: 'input'
+				'@data-binding': $defined: yes
+				'@type': $any: [ 'hidden', 'text', 'search', 'url', 'telephone', 'email', 'password', 'range', 'color' ]
+			bind: (element) ->
+				attribute = element.getAttribute('data-binding')
+				return new InputValueBinding(element, attribute)
+		}, {
+			selector: Selector.Compile
+				$tag: 'input'
+				'@data-binding': $defined: yes
+				'@type': 'checkbox'
+			bind: (element) ->
+				attribute = element.getAttribute('data-binding')
+				return new CheckboxBinding(element)
+		}
+	]
 
-		@bindings = [] # Pull from config
-		@config = config || {}
-		@model = view.model
-		@_bindViewToModel(@model)
+	CreateBindingsForElement: (element) ->
+		throw 'invalid element' unless element? and _.isElement(element)
+		bindings = [ ]
 
-	_bindViewToModel: -> @model.on 'change', @_onModelChange, this
+		bindings.push binder.bind element for binder in binders when binder.selector element
 
-	_unbindViewToModel: -> @model.off 'change', @_onModelChange, this
+		for child in element.children
+			switch child.nodeType
+				when Node.ELEMENT_NODE
+					bindings.push binding for binding in BindingHelpers.CreateBindingsForElement child
+
+		return bindings
+
+__namespace.Binder = class Binder
+	DOM_EVENTS = [ 'change', 'keyup' ]
+
+	constructor: ->
+		@_bindings = [ ]
+		@_model = null
+		@_element = null
+		@_sourceBinding = null
+		@_bound = no
+
+		# Create a function which explicitly calls the dom event handler
+		# for this instance and is stored for event unhooking
+		@_domEventHook = (e) => @_onDomEvent e
 	
-	_onModelChange: ->
-		for attribute, value of @model.changedAttributes()
-			for binding in @bindings
-				binding.setValue @model.get(attribute) if binding.attribute is attribute and not binding.triggered
+	bind: (model, element) ->
+		throw 'model must be provided' unless model?
+		throw 'element must be a dom element' unless _.isElement element
 
-	_onElementChange: ->
-		console.log "Fusion is aware that an el changed occurred."
+		throw 'Binder has already been bound' unless not @_bound
+		@_bound = yes
 
-# Attach an uninstantiated binder to the global Backbone object
-__namespace.Selector = Selector
-__namespace.Binder = Binder
+		@_model = model
+		@_element = element
+		@_bindings = BindingHelpers.CreateBindingsForElement @_element
+
+		# We do not control dom events, so hook up the model first
+		@_model.on 'change', @_onModelChange, this
+		$(@_element).on DOM_EVENTS.join(' '), @_domEventHook
+
+		b.push @_model.toJSON() for b in @_bindings 
+
+	unbind: ->
+		# We do not control dom events, so unhook the dom before the model
+		$(@_element).off DOM_EVENTS.join(' '), @_domEventHook
+		@_model.off 'change', @_onModelChange, this
+
+		@_bindings = [ ]
+		@_element = null
+		@_model = null
+
+	_onDomEvent: (e) ->
+		throw '???' unless not @_sourceBinding?
+		
+		# Query the bindings to find one that claims responsibility for the event
+		@_sourceBinding = do => return b for b in @_bindings when b.sources e
+		if not @_sourceBinding?
+			return
+
+		@_model.set @_sourceBinding.pull()	
+
+		@_sourceBinding = null
+
+	_onModelChange: (e) ->
+		b.push @_model.toJSON() for b in @_bindings when b isnt @_sourceBinding

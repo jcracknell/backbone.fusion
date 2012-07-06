@@ -1,44 +1,31 @@
 $(function() {
 
-	var bb = bb || { };
-	bb.Collections = bb.Collections || { };
-	bb.Models = bb.Models || { };
-	bb.Views = bb.Views || { };
+	var Sandbox = Sandbox || { };
+	Sandbox.Collections = Sandbox.Collections || { };
+	Sandbox.Models = Sandbox.Models || { };
+	Sandbox.Views = Sandbox.Views || { };
 
-	bb.Models.TreeNode = Backbone.Model.extend({
-		_children: undefined,
-
-		defaults: function() {
-			return {
-				'name': '',
-				'text': ''
-			};
-		},
-
-		initialize: function() {
-
-		}
-	});
-
-	bb.Collections.TreeNodeCollection = Backbone.Collection.extend({
-		model: bb.Models.TreeNode,
-
+	Sandbox.Models.Cat = Backbone.Model.extend({
+		defaults: function() { return {
+			'name': '',
+			'age': 0,
+			'description': ''
+		} },
 		initialize: function() {
 		}
 	});
 
-	bb.Views.TreeNodeView = Backbone.View.extend({
-		model: bb.Models.TreeNode,
-		_modelBinder: undefined,
-
+	Sandbox.Views.CatView = Backbone.View.extend({
+		model: Sandbox.Models.Cat,
 		initialize: function() {
-			this.setElement($($('#treenode-template').html())[0]);
-			this._modelBinder = new Backbone.Fusion(this);
-			this.model.set({toy: true});
+			this.setElement($($('#cat-template').html())[0]);
+			this.binder = new Backbone.Fusion.Binder();
+			this.binder.bind(this.model, this.el);
 		}
 	});
 
-	var rootNode = new bb.Models.TreeNode();
-	var rootView = new bb.Views.TreeNodeView({ model: rootNode })
-	$('body').append(rootView.el);
+	var cat = new Sandbox.Models.Cat();
+	cat.set({ name: 'Mr. Whiskers', description: 'lovely', age: 8 });
+	var catView = new Sandbox.Views.CatView({ model: cat });
+	$('body').append(catView.el);
 });

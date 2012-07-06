@@ -5,18 +5,27 @@
 		<script type="text/javascript" src="../lib/jquery-1.7.2.js"></script>
 		<script type="text/javascript" src="../lib/backbone.js"></script>
 		<script type="text/javascript" src="../js/backbone.fusion.js"></script>
-		<script type="text/template" id="treenode-template">
-			<div class="treenode">
-				<div name="name"></div>
-				<div name="text"></div>
+		<script type="text/template" id="cat-template">
+			<div class="cat">
+				<p>
+					My {{description}} cat is named {{name}}. It is {{age}} years old.
+				</p>
+				<p>
+					My <input type="text" data-binding="description"/> cat is named <input type="text" data-binding="name"/>.
+					It is <input type="text" data-binding="age"/> years old.
+				</p>
 				<div>
 					<label>Name</label>
-					<input type="text" name="name"/>
+					<input type="text" data-binding="name"/>
 				</div>
 				<div>
-					<label>Text</label>
-					<textarea name="text"></textarea>
+					<label>Age</label>
+					<input type="text" data-binding="age"/>
 				</div>
+				<div>	
+					<label>Description</label>
+					<input type="text" data-binding="description"/>
+				</div>	
 			</div>
 		</script>
 		<script type="text/javascript" src="app.js"></script>
