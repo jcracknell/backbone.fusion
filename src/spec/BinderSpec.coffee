@@ -35,15 +35,29 @@ describe 'Backbone.Fusion.Binder', ->
 			beforeEach ->
 				element = document.createElement 'input'
 				element.setAttribute 'type', 'text'
+			it 'should update the form element when the model changes', ->	
 				element.setAttribute 'data-binding', 'name'
 				binder.bind model, element
-			it 'should update the form element when the model changes', ->	
 				model.set name: 'Garfield'
 				expect(element.value).toEqual('Garfield')
 			it 'should update the model when the form element changes', ->	
+				element.setAttribute 'data-binding', 'name'
+				binder.bind model, element
 				element.value = 'Nermal'
 				$(element).change()
 				expect(model.get('name')).toEqual('Nermal')
+			it 'should update the model on specified events', ->
+				element.setAttribute 'data-binding', "attribute: 'name', events: [ 'keypress' ]"
+				binder.bind model, element
+				element.value = 'Nermal'
+				$(element).keypress()
+				expect(model.get('name')).toEqual('Nermal')
+			it 'should not update the model on unspecified events', ->
+				element.setAttribute 'data-binding', "attribute: 'name', events: [ 'keypress' ]"
+				binder.bind model, element
+				element.value = 'Nermal'
+				$(element).change()
+				expect(model.get('name')).toEqual('')
 		describe '<input type="password"/>', ->
 			beforeEach ->
 				element = document.createElement 'input'
@@ -69,5 +83,3 @@ describe 'Backbone.Fusion.Binder', ->
 				element.value = 'tends to shed'
 				$(element).change()
 				expect(model.get 'notes').toEqual('tends to shed')
-
-				

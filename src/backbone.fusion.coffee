@@ -79,6 +79,21 @@ __namespace.Binding = class Binding
 	push: (model) -> throw 'not implemented'
 	sources: (e) -> throw 'not implemented'
 
+__namespace.FilteringBinding = class FilteringBinding extends Binding	
+	constructor: (filtered) ->
+		throw 'filtered binding must be specified' unless filtered?
+		@_filtered = filtered
+	pull: -> @_filtered.pull()	
+	push: (model) -> @_filtered.push(model)
+	sources: (e) -> @_filtered.sources(e)
+
+__namespace.EventFilteringBinding = class EventFilteringBinding extends FilteringBinding
+	constructor: (filtered, events) ->
+		super filtered
+		throw 'events must be an array' unless _.isArray events
+		@_events = events
+	sources: (e) -> e.type in @_events and @_filtered.sources e
+
 __namespace.InputValueBinding = class InputValueBinding extends Binding
 	constructor: (@inputElement, @attribute) ->
 		@inputElement.value = ''
@@ -104,25 +119,55 @@ __namespace.BindingHelpers = BindingHelpers = do ->
 						'@data-binding': $defined: yes
 					}
 				]	
-			bind: (element) ->
-				attribute = element.getAttribute('data-binding')
-				return new InputValueBinding(element, attribute)
+			bind: (element, attribute) -> new InputValueBinding element, attribute
 		}, {
 			selector: Selector.Compile
 				$tag: 'input'
 				'@data-binding': $defined: yes
 				'@type': 'checkbox'
-			bind: (element) ->
-				attribute = element.getAttribute('data-binding')
-				return new CheckboxBinding(element)
+			bind: (element, attribute) -> new CheckboxBinding(element, attribute)
 		}
+	]
+	getBindingConfiguration = (element) ->
+		return null unless _.isElement(element) and element.hasAttribute('data-binding')
+
+		attrValue = element.getAttribute 'data-binding'
+
+		configuration = { }
+		if attrValue.indexOf(':') > -1
+			try
+				configuration = eval "({#{attrValue}})"
+			catch ex
+				throw "error evaluating binding configuration on element #{element.innerHtml}"
+		else
+			configuration.attribute = attrValue
+
+		configuration.events or= [ 'change' ]
+
+		return configuration	
+
+	applyBindingConfiguration = (binding, configuration) ->
+		throw 'binding configuration property events must be an array' unless _.isArray configuration.events
+		throw "invalid binding configuration events event #{e}" for e in configuration.events when not _.include BindingHelpers.DOM_EVENTS, e
+		binding = new EventFilteringBinding binding, configuration.events
+
+		return binding
+		
+	DOM_EVENTS: [
+		'change', 'focus', 'focusin', 'focusout', 'hover', 'keydown', 'keypress', 'keyup',
+		'mousedown', 'mouseenter', 'mouseleave', 'mousemove', 'mouseout', 'mouseover', 'mouseup',
+		'resize', 'scroll', 'select', 'submit', 'toggle'
 	]
 
 	CreateBindingsForElement: (element) ->
 		throw 'invalid element' unless element? and _.isElement(element)
 		bindings = [ ]
 
-		bindings.push binder.bind element for binder in binders when binder.selector element
+		for binder in binders when binder.selector element
+			configuration = getBindingConfiguration element
+			binding = binder.bind element, configuration.attribute
+			binding = applyBindingConfiguration binding, configuration
+			bindings.push binding
 
 		for child in element.children
 			switch child.nodeType
@@ -132,7 +177,6 @@ __namespace.BindingHelpers = BindingHelpers = do ->
 		return bindings
 
 __namespace.Binder = class Binder
-	DOM_EVENTS = [ 'change', 'keyup' ]
 
 	constructor: ->
 		@_bindings = [ ]
@@ -158,13 +202,13 @@ __namespace.Binder = class Binder
 
 		# We do not control dom events, so hook up the model first
 		@_model.on 'change', @_onModelChange, this
-		$(@_element).on DOM_EVENTS.join(' '), @_domEventHook
+		$(@_element).on BindingHelpers.DOM_EVENTS.join(' '), @_domEventHook
 
 		b.push @_model.toJSON() for b in @_bindings 
 
 	unbind: ->
 		# We do not control dom events, so unhook the dom before the model
-		$(@_element).off DOM_EVENTS.join(' '), @_domEventHook
+		$(@_element).off BindingHelpers.DOM_EVENTS.join(' '), @_domEventHook
 		@_model.off 'change', @_onModelChange, this
 
 		@_bindings = [ ]
@@ -176,6 +220,8 @@ __namespace.Binder = class Binder
 		
 		# Query the bindings to find one that claims responsibility for the event
 		@_sourceBinding = do => return b for b in @_bindings when b.sources e
+
+		# If no binding sourced the event, then do nothing
 		if not @_sourceBinding?
 			return
 
