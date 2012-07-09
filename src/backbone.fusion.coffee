@@ -123,6 +123,13 @@ __namespace.ArrayCheckboxInputBinding = class ArrayCheckboxInputBinding extends 
 	write: (model) ->
 		@element.checked = _.include model.get(@attribute), @element.value
 
+__namespace.TemplateBinding = class TemplateBinding extends Binding
+	constructor: (@node) ->
+		throw 'invalid node' unless @node?
+		@_template = _.template(@node.nodeValue, null, interpolate: BindingHelpers.TEMPLATE_PATTERN);
+	write: (model) -> @node.nodeValue = @_template(model.toJSON())
+	sources: (e) -> no
+
 __namespace.BindingHelpers = BindingHelpers = do ->
 	binders = [
 		{
@@ -178,6 +185,10 @@ __namespace.BindingHelpers = BindingHelpers = do ->
 		binding = new EventFilteringBinding binding, configuration.events
 
 		return binding
+	
+	isTemplatedNode = (node) -> node.nodeValue? and !!node.nodeValue.match(BindingHelpers.TEMPLATE_PATTERN)
+	
+	TEMPLATE_PATTERN: /{{([a-zA-Z_$][a-zA-Z_$0-9]*)}}/g
 
 	DOM_EVENTS: [
 		'change', 'focus', 'focusin', 'focusout', 'hover', 'keydown', 'keypress', 'keyup',
@@ -189,16 +200,23 @@ __namespace.BindingHelpers = BindingHelpers = do ->
 		throw 'invalid element' unless element? and _.isElement(element)
 		bindings = [ ]
 
+		for attribute in element.attributes
+			if isTemplatedNode(attribute)
+				bindings.push new TemplateBinding attribute
+
 		for binder in binders when binder.selector element
 			configuration = getBindingConfiguration element
 			binding = binder.bind element, configuration.attribute
 			binding = applyBindingConfiguration binding, configuration
 			bindings.push binding
 
-		for child in element.children
+		for child in element.childNodes
 			switch child.nodeType
 				when Node.ELEMENT_NODE
 					bindings.push binding for binding in BindingHelpers.CreateBindingsForElement child
+				when Node.TEXT_NODE
+					if isTemplatedNode child
+						bindings.push new TemplateBinding child
 
 		return bindings
 

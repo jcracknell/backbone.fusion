@@ -7,15 +7,12 @@
 		<script type="text/javascript" src="../js/backbone.fusion.js"></script>
 		<script type="text/template" id="cat-template">
 			<div class="cat">
-				<p>
-					My {{description}} cat is named {{name}}. It is {{age}} years old.
-				</p>
-				<p>{{notes}}</p>
-				<p>
-					My <input type="text" data-binding="description"/> cat is named <input type="text" data-binding="name"/>.
-					It is <input type="text" data-binding="age"/> years old.
-					<textarea data-binding="notes"></textarea>
-				</p>
+				<div title="Description of my cat {{name}}.">
+					<p>	
+						My {{description}} cat is named {{name}}. It is {{age}} years old, and has {{conditions}}.
+					</p>
+					<p>{{notes}}</p>
+				</div>
 				<div>
 					<label>Name</label>
 					<input type="text" data-binding="attribute: 'name', events: [ 'change', 'keyup' ]"/>

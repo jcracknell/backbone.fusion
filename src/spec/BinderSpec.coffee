@@ -4,6 +4,7 @@ Binder = @Backbone.Fusion.Binder
 
 binder = null
 element = null
+node = null
 model = null
 
 CatModel = @Backbone.Model.extend
@@ -116,3 +117,23 @@ describe 'Backbone.Fusion.Binder', ->
 				element.value = 'tends to shed'
 				$(element).change()
 				expect(model.get 'notes').toEqual('tends to shed')
+	describe 'template binding', ->			
+		describe 'text node', ->
+			beforeEach ->
+				element = document.createElement 'div'
+				element.appendChild node = document.createTextNode 'foo {{name}}'
+				binder.bind model, element
+			it 'should update when the model is updated', ->
+				expect(node.nodeValue).toEqual('foo ')
+				model.set name: 'bar'
+				expect(node.nodeValue).toEqual('foo bar')
+		describe 'attribute node', ->
+			beforeEach ->
+				element = document.createElement 'div'
+				element.setAttribute 'title', 'Details for {{name}}'
+				binder.bind model, element
+			it 'should update when the model is updated', ->
+				console.log element
+				expect(element.getAttribute('title')).toEqual('Details for ')
+				model.set name: 'James'
+				expect(element.getAttribute('title')).toEqual('Details for James')
