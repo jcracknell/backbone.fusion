@@ -76,58 +76,47 @@ __namespace.Binding = class Binding
 	write: (model) -> throw 'not implemented'
 	sources: (e) -> throw 'not implemented'
 
-__namespace.FilteringBinding = class FilteringBinding extends Binding	
-	constructor: (filtered) ->
-		throw 'filtered binding must be specified' unless filtered?
-		@_filtered = filtered
-	read: (model) -> @_filtered.read(model)	
-	write: (model) -> @_filtered.write(model)
-	sources: (e) -> @_filtered.sources(e)
-
-__namespace.EventFilteringBinding = class EventFilteringBinding extends FilteringBinding
-	constructor: (filtered, events) ->
-		super filtered
-		throw 'events must be an array' unless _.isArray events
-		@_events = events
-	sources: (e) -> e.type in @_events and @_filtered.sources e
-
 __namespace.ElementBinding = class ElementBinding extends Binding
-	constructor: (@element, @attribute) ->
-		throw 'invalid element' unless _.isElement(@element)
-		throw 'invalid attribute' unless _.isString(@attribute)
-	sources: (e) -> @element is e.target	
+	constructor: (element, configuration) ->
+		throw 'invalid element' unless _.isElement(element)
+		throw 'null configuration' unless configuration?
+		@_element = element
+		@_configuration = configuration
+	sources: (e) -> @_element is e.target	and e.type in @_configuration.events
 
 __namespace.TextInputBinding = class TextInputBinding extends ElementBinding
-	constructor: (@element, @attribute) ->
-		super @element, @attribute
-	read: (model) -> kvp @attribute, @element.value
-	write: (model) -> @element.value = model.get(@attribute)
+	constructor: (element, configuration) -> 
+		super element, configuration
+	read: (model) -> kvp @_configuration.attribute, @_element.value
+	write: (model) -> @_element.value = model.get(@_configuration.attribute)
 
 __namespace.BooleanCheckboxInputBinding = class BooleanCheckboxInputBinding extends ElementBinding
-	constructor: (@element, @attribute) ->
-		super @element, @attribute
-		throw 'invalid element' unless _.isElement(@element) and @element.getAttribute('type') is 'checkbox' and not @element.hasAttribute('value')
-	read: (model) -> kvp @attribute, @element.checked
-	write: (model) -> @element.checked = !!model.get(@attribute)
+	constructor: (element, configuration) -> 
+		super element, configuration
+		throw 'invalid element' unless _.isElement(element) and element.getAttribute('type') is 'checkbox' and not element.hasAttribute('value')
+	read: (model) -> kvp @_configuration.attribute, @_element.checked
+	write: (model) -> @_element.checked = !!model.get(@_configuration.attribute)
 
 __namespace.ArrayCheckboxInputBinding = class ArrayCheckboxInputBinding extends ElementBinding
-	constructor: (@element, @attribute) ->
-		super @element, @attribute
-		throw 'invalid element' unless _.isElement(@element) and @element.getAttribute('type') is 'checkbox' and @element.hasAttribute('value')
+	constructor: (element, configuration) -> 
+		super element, configuration
+		throw 'invalid element' unless _.isElement(element) and element.getAttribute('type') is 'checkbox' and element.hasAttribute('value')
 	read: (model) -> 
-		modelValue = model.get(@attribute)
-		if @element.checked
-			return kvp @attribute, _.union(modelValue, [@element.value])	
+		modelValue = model.get(@_configuration.attribute)
+		if @_element.checked
+			return kvp @_configuration.attribute, _.union(modelValue, [@_element.value])	
 		else
-			return kvp @attribute, _.without(modelValue, @element.value)
+			return kvp @_configuration.attribute, _.without(modelValue, @_element.value)
 	write: (model) ->
-		@element.checked = _.include model.get(@attribute), @element.value
+		@_element.checked = _.include model.get(@_configuration.attribute), @_element.value
 
 __namespace.TemplateBinding = class TemplateBinding extends Binding
-	constructor: (@node) ->
-		throw 'invalid node' unless @node?
-		@_template = _.template(@node.nodeValue, null, interpolate: BindingHelpers.TEMPLATE_PATTERN);
-	write: (model) -> @node.nodeValue = @_template(model.toJSON())
+	constructor: (node) ->
+		throw 'invalid node' unless node?
+		@_node = node
+		@_template = _.template(@_node.nodeValue, null, interpolate: BindingHelpers.TEMPLATE_PATTERN);
+	read: (model) -> throw 'unsupported operation'
+	write: (model) -> @_node.nodeValue = @_template(model.toJSON())
 	sources: (e) -> no
 
 __namespace.BindingHelpers = BindingHelpers = do ->
@@ -144,21 +133,21 @@ __namespace.BindingHelpers = BindingHelpers = do ->
 						'@data-binding': $defined: yes
 					}
 				]	
-			bind: (element, attribute) -> new TextInputBinding element, attribute
+			bind: (element, configuration) -> new TextInputBinding element, configuration
 		}, {
 			selector: Selector.Compile
 				$tag: 'input'
 				'@data-binding': $defined: yes
 				'@type': 'checkbox'
 				'@value': $defined: no
-			bind: (element, attribute) -> new BooleanCheckboxInputBinding element, attribute	
+			bind: (element, configuration) -> new BooleanCheckboxInputBinding element, configuration	
 		}, {
 			selector: Selector.Compile
 				$tag: 'input'
 				'@data-binding': $defined: yes
 				'@type': 'checkbox'
 				'@value': $defined: yes
-			bind: (element, attribute) -> new ArrayCheckboxInputBinding element, attribute	
+			bind: (element, configuration) -> new ArrayCheckboxInputBinding element, configuration	
 		}	
 	]
 	getBindingConfiguration = (element) ->
@@ -179,13 +168,6 @@ __namespace.BindingHelpers = BindingHelpers = do ->
 
 		return configuration	
 
-	applyBindingConfiguration = (binding, configuration) ->
-		throw 'binding configuration property events must be an array' unless _.isArray configuration.events
-		throw "invalid binding configuration events event #{e}" for e in configuration.events when not _.include BindingHelpers.DOM_EVENTS, e
-		binding = new EventFilteringBinding binding, configuration.events
-
-		return binding
-	
 	isTemplatedNode = (node) -> node.nodeValue? and !!node.nodeValue.match(BindingHelpers.TEMPLATE_PATTERN)
 	
 	TEMPLATE_PATTERN: /{{([a-zA-Z_$][a-zA-Z_$0-9]*)}}/g
@@ -206,9 +188,7 @@ __namespace.BindingHelpers = BindingHelpers = do ->
 
 		for binder in binders when binder.selector element
 			configuration = getBindingConfiguration element
-			binding = binder.bind element, configuration.attribute
-			binding = applyBindingConfiguration binding, configuration
-			bindings.push binding
+			bindings.push binder.bind element, configuration
 
 		for child in element.childNodes
 			switch child.nodeType
