@@ -10,7 +10,9 @@ $(function() {
 			'name': '',
 			'age': 0,
 			'description': '',
-			'notes': ''
+			'declawed': false,
+			'notes': '',
+			'conditions': ['mange']
 		} },
 		initialize: function() {
 		}
