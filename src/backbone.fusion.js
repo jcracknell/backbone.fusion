@@ -21,6 +21,7 @@ var
 	BindingHelpers,
 	BooleanCheckboxInputBinding,
 	ElementBinding,
+	TemplateBinding,
 	TextInputBinding
 ;	
 
