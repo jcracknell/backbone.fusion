@@ -34,7 +34,7 @@ __module__.Formats = Formats = {
 	},
 	'float': function(value, context) {
 		if(null === value || !/^-?([0-9,]+(\.[0-9,]*)?)|(\.[0-9,]+)$/.test(value = value.toString())) return NaN;
-		return parseFloat(value);
+		return parseFloat(value.replace(',', ''));
 	},
 	'money': function(value, context) {
 		if('r' == context.direction) {
