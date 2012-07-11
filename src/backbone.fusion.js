@@ -21,14 +21,56 @@ var
 	BindingHelpers,
 	BooleanCheckboxInputBinding,
 	ElementBinding,
+	Formats,
+	FormattedElementBinding,
 	TemplateBinding,
 	TextInputBinding
 ;	
 
+__module__.Formats = Formats = {
+	'integer': function(value, context) {
+		if(null === value || !/^-?[0-9]+$/.test(value = value.toString())) return NaN;
+		return parseInt(value, 10);
+	},
+	'float': function(value, context) {
+		if(null === value || !/^-?([0-9,]+(\.[0-9,]*)?)|(\.[0-9,]+)$/.test(value = value.toString())) return NaN;
+		return parseFloat(value);
+	},
+	'money': function(value, context) {
+		if('r' == context.direction) {
+			if(null === value || !/^-?\$?([0-9,]+(\.[0-9]{0,2})?)|(\.[0-9]{1,2})$/.test(value = value.toString())) return NaN;
+			return parseFloat(value.replace(/[^0-9.-]+/g, ''));
+		} else {
+			return null === value
+				? ''
+				: (value < 0 ? '-' : '') + '$' + value.toString();
+		}
+	},
+	'negative-integer': function(value, context) {
+		value = Formats['integer'](value, context);
+		return value < 0 ? value : NaN;
+	},
+	'non-negative-integer': function(value, context) {
+		value = Formats['integer'](value, context);
+		return value >= 0 ? value : NaN;
+	},
+	'non-positive-integer': function(value, context) {
+		value = Formats['integer'](value, context);
+		return value <= 0 ? value : NaN;
+	},
+	'positive-integer': function(value, context) {
+		value = Formats['integer'](value, context);
+		return value > 0 ? value : NaN;
+	},
+	'text': function(value) {
+		return (value || '').toString();
+	}
+};
+
 __module__.Binding = Binding = function() {
-	this.read = function(model) { throw 'not implemented'; }
-	this.write = function(model) { throw 'not implemented'; }
-	this.sources = function(e) { throw 'not implemented'; }
+	this.read = function(model) { throw 'not implemented'; };
+	this.write = function(model) { throw 'not implemented'; };
+	this.sources = function(e) { throw 'not implemented'; };
 };
 
 __module__.ElementBinding = ElementBinding = function(element, configuration) {
@@ -37,41 +79,66 @@ __module__.ElementBinding = ElementBinding = function(element, configuration) {
 	if(!_.isElement(element)) throw 'invalid element';
 	if(null == configuration) throw 'null configuration';
 
-	var _element = element;
-	var _configuration = configuration;
+	this._getElement = function() { return element; };
+	this._getConfiguration = function() { return configuration; }
 
 	this.sources = function(e) {
-		return _element === e.target && _.contains(_configuration.events, e.type);
+		if(null == e) throw 'null event';
+		return this._getElement() === e.target && _.contains(this._getConfiguration().events, e.type);
+	};
+};
+
+__module__.FormattedElementBinding = FormattedElementBinding = function(element, configuration) {
+	_.extend(this, new ElementBinding(element, configuration));
+
+	this._formatValue = function(value, model, direction) {
+		if(!this._getConfiguration().format) return value;
+
+		return this._getConfiguration().format(value, {
+			binding: this,
+			configuration: this._getConfiguration(),
+			direction: direction,
+			model: model,
+		});
+	};
+
+	this._readRawValue = function() { throw 'not implemented'; };
+
+	this.read = function(model) {
+		var value = this._readRawValue();
+		value = this._formatValue(value, model, 'r');
+		return kvp(this._getConfiguration().attribute, value);
+	};
+
+	this._writeRawValue = function(value) { throw 'not implemented'; };
+
+	this.write = function(model) {
+		var value = model.get(this._getConfiguration().attribute);
+		value = this._formatValue(value, model, 'w');
+		this._writeRawValue(value);
 	};
 };
 
 __module__.TextInputBinding = TextInputBinding = function(element, configuration) {
-	_.extend(this, new ElementBinding(element, configuration));
+	_.extend(this, new FormattedElementBinding(element, configuration));
 
 	var _element = element;
-	var _configuration = configuration;
 
-	this.read = function(model) {
-		return kvp(_configuration.attribute, _element.value);
-	};
-
-	this.write = function(model) {
-		_element.value = model.get(_configuration.attribute);
-	};
+	this._readRawValue = function() { return this._getElement().value; };
+	this._writeRawValue = function(value) { this._getElement().value = value; };
 };
 
 __module__.BooleanCheckboxInputBinding = BooleanCheckboxInputBinding = function(element, configuration) {
 	_.extend(this, new ElementBinding(element, configuration));
 	
-	var _element = element;
-	var _configuration = configuration;
-
 	this.read = function(model) {
-		return kvp(_configuration.attribute, _element.checked);
+		return kvp(this._getConfiguration().attribute, this._getElement().checked);
 	};
 
 	this.write = function(model) {
-		_element.checked = !!model.get(_configuration.attribute);
+		var value = model.get(this._getConfiguration().attribute);
+		// TODO: should this throw on non-boolean value?
+		this._getElement().checked = !!value;
 	};
 };
 
@@ -146,10 +213,21 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 		if(!!~(attrValue.indexOf(':'))) {
 			configuration = (function() {
 				try { return eval('({' + attrValue + '})'); }
-				catch (ex) { throw 'error evaluating binding configuration on element ' + element.outerHtml; }
+				catch (ex) { throw 'error evaluating binding configuration "' + attrValue + '"'; }
 			})();	
 		} else {
 			configuration = { attribute: attrValue };
+		}
+
+		if(configuration.format) {
+			if(_.isString(configuration.format)) {
+				var namedFormat = Formats[configuration.format];
+				if(!_.isFunction(namedFormat))
+					throw 'invalid named format "' + configuration.format + '"';
+				configuration.format = namedFormat;	
+			}
+			if(!_.isFunction(configuration.format))
+				throw 'invalid format';
 		}
 
 		configuration.events || (configuration.events = ['change']);

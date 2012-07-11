@@ -7,9 +7,10 @@
 		<script type="text/javascript" src="../src/backbone.fusion.js"></script>
 		<script type="text/template" id="cat-template">
 			<div class="cat">
-				<div title="Description of my cat {{name}}.">
+				<div title="Description of my cat {{name}}." style="background-color: {{color}};">
 					<p>	
 						My {{description}} cat is named {{name}}. It is {{age}} years old, and has {{conditions}}.
+						It cost {{price}}.
 					</p>
 					<p>{{notes}}</p>
 				</div>
@@ -19,7 +20,7 @@
 				</div>
 				<div>
 					<label>Age</label>
-					<input type="text" data-binding="age"/>
+					<input type="text" data-binding="attribute: 'age', events: ['change', 'keyup'], format: 'non-negative-integer'"/>
 				</div>
 				<div>	
 					<label>Description</label>
@@ -32,6 +33,14 @@
 				<div>
 					<label>Declawed</label>
 					<input type="checkbox" data-binding="declawed" />
+				</div>
+				<div>
+					<label>Color</label>
+					<input type="color" data-binding="color" />
+				</div>
+				<div>
+					<label>Price</label>
+					<input type="text" data-binding="attribute: 'price', format: 'money'" />
 				</div>
 				<div>
 					<fieldset>

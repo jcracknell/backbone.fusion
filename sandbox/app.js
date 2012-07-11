@@ -12,7 +12,9 @@ $(function() {
 			'description': '',
 			'declawed': false,
 			'notes': '',
-			'conditions': ['mange']
+			'conditions': ['mange'],
+			'color': '#ffffff',
+			'price': 9.99
 		} },
 		initialize: function() {
 		}

@@ -190,7 +190,6 @@
           binder.bind(model, element);
         });
         it('should update when the model is updated', function() {
-          console.log(element);
           expect(element.getAttribute('title')).toEqual('Details for ');
           model.set({
             name: 'James'
@@ -200,5 +199,4 @@
       });
     });
   });
-
 }).call(this);
