@@ -115,28 +115,24 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 		{
 			bind: function(element, configuration) { return new TextInputBinding(element, configuration); },
 			selector: function(element) {
-				return _.isElement(element) && element.hasAttribute('data-binding')
-					&& 'input' === element.tagName.toLowerCase()
+				return 'input' === element.tagName.toLowerCase()
 					&& _.contains([ 'hidden', 'text', 'search', 'url', 'telephone', 'email', 'password', 'range', 'color' ], element.getAttribute('type'));
 			}
 		}, {	
 			bind: function(element, configuration) { return new TextInputBinding(element, configuration); },
 			selector: function(element) {
-				return _.isElement(element) && element.hasAttribute('data-binding')
-						&& 'textarea' === element.tagName.toLowerCase();
+				return 'textarea' === element.tagName.toLowerCase();
 			}
 		}, {
 			bind: function(element, configuration) { return new BooleanCheckboxInputBinding(element, configuration); },
 			selector: function(element) {
-				return _.isElement(element) && element.hasAttribute('data-binding')
-					&& 'input' === element.tagName.toLowerCase() && 'checkbox' === element.getAttribute('type')
+				return 'input' === element.tagName.toLowerCase() && 'checkbox' === element.getAttribute('type')
 					&& !element.hasAttribute('value');
 			}
 		}, {
 			bind: function(element, configuration) { return new ArrayCheckboxInputBinding(element, configuration); },
 			selector: function(element) {
-				return _.isElement(element) && element.hasAttribute('data-binding')
-					&& 'input' === element.tagName.toLowerCase() && 'checkbox' === element.getAttribute('type')
+				return 'input' === element.tagName.toLowerCase() && 'checkbox' === element.getAttribute('type')
 					&& element.hasAttribute('value');
 			}
 		}	
@@ -185,12 +181,14 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 					bindings.push(new TemplateBinding(attributeNode));
 			});
 
-			_.each(binders, function(binder) {
-				if(!binder.selector(element)) return;
-				
-				var configuration = getBindingConfiguration(element);
-				bindings.push(binder.bind(element, configuration));
-			});
+			if(element.hasAttribute('data-binding')) {
+				_.each(binders, function(binder) {
+					if(!binder.selector(element)) return;
+					
+					var configuration = getBindingConfiguration(element);
+					bindings.push(binder.bind(element, configuration));
+				});
+			}
 
 			var textNodes = _.filter(element.childNodes, function(n) { return Node.TEXT_NODE === n.nodeType; });
 			_.each(textNodes, function(textNode) {
