@@ -160,25 +160,47 @@ __module__.ArrayCheckboxInputBinding = ArrayCheckboxInputBinding = function(elem
 	};
 };
 
-__module__.TemplateBinding = TemplateBinding = function(node) {
+__module__.TemplateBinding = TemplateBinding = function(node, defaultBindingConfigurations) {
 	_.extend(this, new Binding());
 	if(null == node) throw 'unspecified node';
+	if(!_.isObject(defaultBindingConfigurations)) throw 'invalid defaultBindingConfigurations';
 
 	var _node = node;
+	var _templateAttributes = [ ];
 	var _template = _.template(_node.nodeValue, null, { interpolate: BindingHelpers.TEMPLATE_PATTERN });
+	var _templateAttributes = { };
+	
+	(function() {
+		var match;
+		while(match = BindingHelpers.TEMPLATE_PATTERN.exec(node.nodeValue)) {
+			var attributeName = match[1];
+			_templateAttributes[attributeName] = defaultBindingConfigurations[attributeName] || { };		
+		}
+	})();	
 
 	this.read = function(model) { throw 'unsupported operation'; };
 
 	this.write = function(model) {
-		_node.nodeValue = _template(model.toJSON());	
+		var templateValues = { };
+		_.each(_templateAttributes, function(configuration, attributeName) {
+			var attributeValue = model.get(attributeName);
+			if(configuration.format)
+				attributeValue = configuration.format(attributeValue, { direction: 'w', model: model, configuration: configuration });
+
+			templateValues[attributeName] = attributeValue;
+		});
+
+		_node.nodeValue = _template(templateValues);
 	};
 
 	this.sources = function(e) { return false; };
 };
 
 __module__.BindingHelpers = BindingHelpers = (function() {
-	var binders, getBindingConfiguration, isTemplatedNode;
-	binders = [
+	var BINDING_ATTRIBUTE = 'data-binding';
+	var BINDING_DEFAULTS_ATTRIBUTE = 'data-binding-defaults';
+
+	var binders = [
 		{
 			bind: function(element, configuration) { return new TextInputBinding(element, configuration); },
 			selector: function(element) {
@@ -204,21 +226,70 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 			}
 		}	
 	];
-	getBindingConfiguration = function(element) {
-		if(!(_.isElement(element) && element.hasAttribute('data-binding')))
-			return null;
-		
-		var attrValue, configuration;
-		attrValue = element.getAttribute('data-binding');	
-		if(!!~(attrValue.indexOf(':'))) {
-			configuration = (function() {
-				try { return eval('({' + attrValue + '})'); }
-				catch (ex) { throw 'error evaluating binding configuration "' + attrValue + '"'; }
-			})();	
-		} else {
-			configuration = { attribute: attrValue };
-		}
 
+	var getDeclaredDefaultBindingConfigurations = function(element) {
+		if(!element.hasAttribute(BINDING_DEFAULTS_ATTRIBUTE))
+			return null;
+
+		var declaredString = element.getAttribute(BINDING_DEFAULTS_ATTRIBUTE);
+		var declared  = (function() {
+			try { return eval('({' + declaredString + '})'); }
+			catch (ex) { throw 'error evaluating ' + BINDING_DEFAULTS_ATTRIBUTE + ' "' + declaredString + '"'; }
+		})();	
+
+		_.each(declared, function(d) {
+			// TODO: should this have its own implementation?
+			processElementBindingConfiguration(d);
+		});
+
+		return declared;
+	}
+
+	var getEffectiveDefaultBindingConfigurations = function(inherited, declared) {
+		if(!declared) return inherited;
+
+		var effective = { }; 
+		// Second level copy of inherited to effective
+		_.each(inherited, function(inheritedDefaults, inheritedName) {
+			effective[inheritedName] = _.clone(inheritedDefaults);
+		});
+
+		// Second level copy of declared over effective
+		_.each(declared, function(declaredDefaults, declaredName) {
+			var effectiveDefaults = effective[declaredName] || (effective[declaredName] = { });
+			_.extend(effectiveDefaults, declaredDefaults);
+		});
+		return effective;
+	};
+
+	var getDefaultBindingConfigurations = function(element, inherited) {
+		// TODO: global defaults ala { events: ['keyup'], '@attname':{ format: 'money' } }
+		// TODO: operators, e.g. { $reset: true } -> clear defaults, { '@attname': { $reset: true } }
+		if(!_.isElement(element)) throw 'invalid element';	
+		if(!_.isObject(inherited)) throw 'invalid inherited';
+
+		var declared = getDeclaredDefaultBindingConfigurations(element);
+
+		if(!declared)
+			return inherited;
+
+		return getEffectiveDefaultBindingConfigurations(inherited, declared);
+	};
+
+	var getDeclaredElementBindingConfiguration = function(element) {
+		if(!element.hasAttribute(BINDING_ATTRIBUTE))
+			return null;
+
+		var declaredString = element.getAttribute(BINDING_ATTRIBUTE);
+		if(!!~(declaredString.indexOf(':'))) {
+			try { return eval('({' + declaredString + '})'); }
+			catch (ex) { throw 'error evaluating ' + BINDING_ATTRIBUTE + ' "' + declaredString + '"'; }
+		} else {
+			return { attribute: declaredString };
+		}
+	}
+
+	var processElementBindingConfiguration = function(configuration) {
 		if(configuration.format) {
 			if(_.isString(configuration.format)) {
 				var namedFormat = Formats[configuration.format];
@@ -231,14 +302,30 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 		}
 
 		configuration.events || (configuration.events = ['change']);
+	};
+
+	var getElementBindingConfiguration = function(element, defaultConfigurations) {
+		if(!_.isElement(element)) throw 'invalid element';
+		
+		var declaredConfiguration = getDeclaredElementBindingConfiguration(element);
+
+		if(!declaredConfiguration)
+			return null;
+
+		var attributeName = declaredConfiguration.attribute;
+		var defaultConfiguration = defaultConfigurations[attributeName];
+
+		var configuration = _.defaults(_.clone(declaredConfiguration), defaultConfiguration);
+
+		processElementBindingConfiguration(configuration);
 
 		return configuration;
 	};
 
-	isTemplatedNode = function(node) {
+	var isTemplatedNode = function(node) {
 		return null != node.nodeValue && !!node.nodeValue.match(BindingHelpers.TEMPLATE_PATTERN);
 	};
-
+	
 	return {
 
 		TEMPLATE_PATTERN: /{{([a-zA-Z_$][a-zA-Z_$0-9]*)}}/g,
@@ -249,37 +336,36 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 			'resize', 'scroll', 'select', 'submit', 'toggle'
 		],
 
-		CreateBindingsForElement: function(element) {
+		CreateBindingsForElement: function(element, inheritedDefaultBindingConfigurations) {
 			if(!_.isElement(element)) throw 'invalid element';
+
+			var defaultBindingConfigurations = getDefaultBindingConfigurations(element, inheritedDefaultBindingConfigurations || { });
+
+			var bindingConfiguration = getElementBindingConfiguration(element, defaultBindingConfigurations);
+			if(bindingConfiguration) {
+				var selectedBinder = _.find(binders, function(b) { return b.selector(element); });
+				if(selectedBinder)
+					return [ selectedBinder.bind(element, bindingConfiguration) ];
+			}
 
 			var bindings = [ ];
 
 			_.each(element.attributes, function(attributeNode) {
 				if(isTemplatedNode(attributeNode))
-					bindings.push(new TemplateBinding(attributeNode));
+					bindings.push(new TemplateBinding(attributeNode, defaultBindingConfigurations));
 			});
 
-			if(element.hasAttribute('data-binding')) {
-				_.each(binders, function(binder) {
-					if(!binder.selector(element)) return;
-					
-					var configuration = getBindingConfiguration(element);
-					bindings.push(binder.bind(element, configuration));
-				});
-			}
-
-			var textNodes = _.filter(element.childNodes, function(n) { return Node.TEXT_NODE === n.nodeType; });
-			_.each(textNodes, function(textNode) {
-				if(isTemplatedNode(textNode))
-					bindings.push(new TemplateBinding(textNode));
-			});
-
-			var childNodes = _.filter(element.childNodes, function(n) { return Node.ELEMENT_NODE === n.nodeType; });
-			_.each(childNodes, function(child) {
-				var childBindings = BindingHelpers.CreateBindingsForElement(child);
-				_.each(childBindings, function(childBinding) {
-					bindings.push(childBinding);
-				});
+			_.each(element.childNodes, function(childNode) {
+				switch(childNode.nodeType) {
+					case Node.ELEMENT_NODE:
+						_.chain(BindingHelpers.CreateBindingsForElement(childNode, defaultBindingConfigurations))
+							.each(function(childBinding) { bindings.push(childBinding); });
+						break;
+					case Node.TEXT_NODE:
+						if(isTemplatedNode(childNode))
+							bindings.push(new TemplateBinding(childNode, defaultBindingConfigurations));
+						break;
+				}
 			});
 
 			return bindings;

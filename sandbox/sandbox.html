@@ -6,7 +6,7 @@
 		<script type="text/javascript" src="../lib/backbone.js"></script>
 		<script type="text/javascript" src="../src/backbone.fusion.js"></script>
 		<script type="text/template" id="cat-template">
-			<div class="cat">
+			<div class="cat" data-binding-defaults="price: { format: 'money' }">
 				<div title="Description of my cat {{name}}." style="background-color: {{color}};">
 					<p>	
 						My {{description}} cat is named {{name}}. It is {{age}} years old, and has {{conditions}}.
@@ -40,7 +40,7 @@
 				</div>
 				<div>
 					<label>Price</label>
-					<input type="text" data-binding="attribute: 'price', format: 'money'" />
+					<input type="text" data-binding="attribute: 'price'" />
 				</div>
 				<div>
 					<fieldset>
