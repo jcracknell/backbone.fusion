@@ -203,24 +203,24 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 	var binders = [
 		{
 			bind: function(element, configuration) { return new TextInputBinding(element, configuration); },
-			selector: function(element) {
+			binds: function(element) {
 				return 'input' === element.tagName.toLowerCase()
 					&& _.contains([ 'hidden', 'text', 'search', 'url', 'telephone', 'email', 'password', 'range', 'color' ], element.getAttribute('type'));
 			}
 		}, {	
 			bind: function(element, configuration) { return new TextInputBinding(element, configuration); },
-			selector: function(element) {
+			binds: function(element) {
 				return 'textarea' === element.tagName.toLowerCase();
 			}
 		}, {
 			bind: function(element, configuration) { return new BooleanCheckboxInputBinding(element, configuration); },
-			selector: function(element) {
+			binds: function(element) {
 				return 'input' === element.tagName.toLowerCase() && 'checkbox' === element.getAttribute('type')
 					&& !element.hasAttribute('value');
 			}
 		}, {
 			bind: function(element, configuration) { return new ArrayCheckboxInputBinding(element, configuration); },
-			selector: function(element) {
+			binds: function(element) {
 				return 'input' === element.tagName.toLowerCase() && 'checkbox' === element.getAttribute('type')
 					&& element.hasAttribute('value');
 			}
@@ -343,7 +343,7 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 
 			var bindingConfiguration = getElementBindingConfiguration(element, defaultBindingConfigurations);
 			if(bindingConfiguration) {
-				var selectedBinder = _.find(binders, function(b) { return b.selector(element); });
+				var selectedBinder = _.find(binders, function(binder) { return binder.binds(element); });
 				if(selectedBinder)
 					return [ selectedBinder.bind(element, bindingConfiguration) ];
 			}
