@@ -14,6 +14,15 @@ function kvp(k, v) {
 	return p;
 }	
 
+function __extend(child, parent) {
+	// This relies on _.each's use of the hasOwn test
+	_.each(parent, function(value, key) { child[key] = value; });
+	function ctor() { this.constructor = child; }
+	ctor.prototype = parent.prototype;
+	child.prototype = new ctor();
+	return parent.prototype;
+}
+
 var
 	ArrayCheckboxInputBinding,
 	Binder,
@@ -67,122 +76,157 @@ __module__.Formats = Formats = {
 	}
 };
 
-__module__.Binding = Binding = function() {
-	this.read = function(model) { throw 'not implemented'; };
-	this.write = function(model) { throw 'not implemented'; };
-	this.sources = function(e) { throw 'not implemented'; };
-};
+__module__.Binding = Binding = (function() {
+	function Binding() { } 
+	Binding.prototype.read = function(model) { throw 'not implemented'; };
+	Binding.prototype.write = function(model) { throw 'not implemented'; };
+	Binding.prototype.sources = function(e) { throw 'not implemented'; };
 
-__module__.ElementBinding = ElementBinding = function(element, configuration) {
-	_.extend(this, new Binding());
+	return Binding;
+})();
 
-	if(!_.isElement(element)) throw 'invalid element';
-	if(null == configuration) throw 'null configuration';
+__module__.ElementBinding = ElementBinding = (function() {
+	var __super = __extend(ElementBinding, Binding);
 
-	this._getElement = function() { return element; };
-	this._getConfiguration = function() { return configuration; }
+	function ElementBinding(element, configuration) {
+		__super.constructor.call(this);
+		if(!_.isElement(element)) throw 'invalid element';
+		if(null == configuration) throw 'null configuration';
 
-	this.sources = function(e) {
+		this._element = element;
+		this._configuration = configuration;
+	}
+
+	ElementBinding.prototype.sources = function(e) {
 		if(null == e) throw 'null event';
-		return this._getElement() === e.target && _.contains(this._getConfiguration().events, e.type);
+		return this._element === e.target && _.contains(this._configuration.events, e.type);
 	};
-};
 
-__module__.FormattedElementBinding = FormattedElementBinding = function(element, configuration) {
-	_.extend(this, new ElementBinding(element, configuration));
+	return ElementBinding;
+})();
 
-	this._formatValue = function(value, model, direction) {
-		if(!this._getConfiguration().format) return value;
+__module__.FormattedElementBinding = FormattedElementBinding = (function() {
+	var __super = __extend(FormattedElementBinding, ElementBinding);
 
-		return this._getConfiguration().format(value, {
+	function FormattedElementBinding(element, configuration) {
+		__super.constructor.call(this, element, configuration);
+	}
+
+	FormattedElementBinding.prototype._formatValue = function(value, model, direction) {
+		if(!this._configuration.format) return value;
+
+		return this._configuration.format(value, {
 			binding: this,
-			configuration: this._getConfiguration(),
+			configuration: this._configuration,
 			direction: direction,
 			model: model,
 		});
 	};
 
-	this._readRawValue = function() { throw 'not implemented'; };
+	FormattedElementBinding.prototype._readRawValue = function() { throw 'not implemented'; };
 
-	this.read = function(model) {
+	FormattedElementBinding.prototype.read = function(model) {
 		var value = this._readRawValue();
 		value = this._formatValue(value, model, 'r');
-		return kvp(this._getConfiguration().attribute, value);
+		return kvp(this._configuration.attribute, value);
 	};
 
-	this._writeRawValue = function(value) { throw 'not implemented'; };
+	FormattedElementBinding.prototype._writeRawValue = function(value) { throw 'not implemented'; };
 
-	this.write = function(model) {
-		var value = model.get(this._getConfiguration().attribute);
+	FormattedElementBinding.prototype.write = function(model) {
+		var value = model.get(this._configuration.attribute);
 		value = this._formatValue(value, model, 'w');
 		this._writeRawValue(value);
 	};
-};
 
-__module__.TextInputBinding = TextInputBinding = function(element, configuration) {
-	_.extend(this, new FormattedElementBinding(element, configuration));
+	return FormattedElementBinding;
+})();
 
-	var _element = element;
+__module__.TextInputBinding = TextInputBinding = (function() {
+	var __super = __extend(TextInputBinding, FormattedElementBinding);
 
-	this._readRawValue = function() { return this._getElement().value; };
-	this._writeRawValue = function(value) { this._getElement().value = value; };
-};
+	function TextInputBinding(element, configuration) {
+		__super.constructor.call(this, element, configuration);
+	}
 
-__module__.BooleanCheckboxInputBinding = BooleanCheckboxInputBinding = function(element, configuration) {
-	_.extend(this, new ElementBinding(element, configuration));
-	
-	this.read = function(model) {
-		return kvp(this._getConfiguration().attribute, this._getElement().checked);
+	TextInputBinding.prototype._readRawValue = function() {
+		return this._element.value;
 	};
 
-	this.write = function(model) {
-		var value = model.get(this._getConfiguration().attribute);
+	TextInputBinding.prototype._writeRawValue = function(value) {
+		this._element.value = value;
+	};
+
+	return TextInputBinding;
+})();
+
+__module__.BooleanCheckboxInputBinding = BooleanCheckboxInputBinding = (function() {
+	var __super = __extend(BooleanCheckboxInputBinding, ElementBinding);
+
+	function BooleanCheckboxInputBinding(element, configuration) {
+		__super.constructor.call(this, element, configuration);
+		if(!('checkbox' === element.getAttribute('type'))) throw 'invalid element';
+	}
+	
+	BooleanCheckboxInputBinding.prototype.read = function(model) {
+		return kvp(this._configuration.attribute, this._element.checked);
+	};
+
+	BooleanCheckboxInputBinding.prototype.write = function(model) {
+		var value = model.get(this._configuration.attribute);
 		// TODO: should this throw on non-boolean value?
-		this._getElement().checked = !!value;
-	};
-};
-
-__module__.ArrayCheckboxInputBinding = ArrayCheckboxInputBinding = function(element, configuration) {
-	_.extend(this, new ElementBinding(element, configuration));
-
-	var _element = element;
-	var _configuration = configuration;
-
-	this.read = function(model) {
-		var modelValue = model.get(_configuration.attribute);
-		return _element.checked
-			? kvp(_configuration.attribute, _.union(modelValue, [ _element.value ]))
-			: kvp(_configuration.attribute, _.without(modelValue, _element.value));	
+		this._element.checked = !!value;
 	};
 
-	this.write = function(model) {
-		_element.checked = _.contains(model.get(_configuration.attribute), _element.value);
+	return BooleanCheckboxInputBinding;
+})();
+
+__module__.ArrayCheckboxInputBinding = ArrayCheckboxInputBinding = (function() {
+	var __super = __extend(ArrayCheckboxInputBinding, ElementBinding);
+
+	function ArrayCheckboxInputBinding(element, configuration) {
+		__super.constructor.call(this, element, configuration);
+		if(!('checkbox' === element.getAttribute('type'))) throw 'invalid element';
+	}
+
+	ArrayCheckboxInputBinding.prototype.read = function(model) {
+		var modelValue = model.get(this._configuration.attribute);
+		return this._element.checked
+			? kvp(this._configuration.attribute, _.union(modelValue, [ this._element.value ]))
+			: kvp(this._configuration.attribute, _.without(modelValue, this._element.value));	
 	};
-};
 
-__module__.TemplateBinding = TemplateBinding = function(node, defaultBindingConfigurations) {
-	_.extend(this, new Binding());
-	if(null == node) throw 'unspecified node';
-	if(!_.isObject(defaultBindingConfigurations)) throw 'invalid defaultBindingConfigurations';
+	ArrayCheckboxInputBinding.prototype.write = function(model) {
+		this._element.checked = _.contains(model.get(this._configuration.attribute), this._element.value);
+	};
 
-	var _node = node;
-	var _templateAttributes = [ ];
-	var _template = _.template(_node.nodeValue, null, { interpolate: BindingHelpers.TEMPLATE_PATTERN });
-	var _templateAttributes = { };
-	
-	(function() {
+	return ArrayCheckboxInputBinding;
+})();
+
+__module__.TemplateBinding = TemplateBinding = (function() {
+	var __super = __extend(TemplateBinding, Binding);
+
+	function TemplateBinding(node, defaultBindingConfigurations) {
+		__super.constructor.call(this);
+		if(null == node) throw 'unspecified node';
+		if(!_.isObject(defaultBindingConfigurations)) throw 'invalid defaultBindingConfigurations';
+
+		this._node = node;
+		this._template = _.template(node.nodeValue, null, { interpolate: BindingHelpers.TEMPLATE_PATTERN });
+
+		this._templateAttributes = { };
 		var match;
 		while(match = BindingHelpers.TEMPLATE_PATTERN.exec(node.nodeValue)) {
 			var attributeName = match[1];
-			_templateAttributes[attributeName] = defaultBindingConfigurations['@' + attributeName] || { };		
+			this._templateAttributes[attributeName] = defaultBindingConfigurations['@' + attributeName] || { };
 		}
-	})();	
+	}
 
-	this.read = function(model) { throw 'unsupported operation'; };
+	TemplateBinding.prototype.read = function(model) { throw 'unsupported operation'; };
 
-	this.write = function(model) {
+	TemplateBinding.prototype.write = function(model) {
 		var templateValues = { };
-		_.each(_templateAttributes, function(configuration, attributeName) {
+		_.each(this._templateAttributes, function(configuration, attributeName) {
 			var attributeValue = model.get(attributeName);
 			if(configuration.format)
 				attributeValue = configuration.format(attributeValue, { direction: 'w', model: model, configuration: configuration });
@@ -190,11 +234,13 @@ __module__.TemplateBinding = TemplateBinding = function(node, defaultBindingConf
 			templateValues[attributeName] = attributeValue;
 		});
 
-		_node.nodeValue = _template(templateValues);
+		this._node.nodeValue = this._template(templateValues);
 	};
 
-	this.sources = function(e) { return false; };
-};
+	TemplateBinding.prototype.sources = function(e) { return false; };
+
+	return TemplateBinding;
+})();
 
 __module__.BindingHelpers = BindingHelpers = (function() {
 	var BINDING_ATTRIBUTE = 'data-binding';
@@ -374,62 +420,70 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 	};
 })();
 
-__module__.Binder = Binder = function() {
-	var _bindings = [ ];
-	var _model = null;
-	var _element = null;
-	var _sourceBinding = null;
-	var _bound = false;
+__module__.Binder = Binder = (function() {
 
-	function _onDomEvent(e) {
-		if(null != _sourceBinding) throw 'concurrent events?';
+	function Binder() {
+		this._bindings = [ ];
+		this._model = null;
+		this._element = null;
+		this._sourceBinding = null;
+		this._bound = false;
+
+		var _this = this;
+		this._domEventHook = function(e) { return _this._onDomEvent(e); }
+	}
+
+	Binder.prototype._onDomEvent = function(e) {
+		if(null != this._sourceBinding) throw 'concurrent events?';
 
 		// Find the binding claiming responsibility for the event
-		_sourceBinding = _.find(_bindings, function(binding) { return binding.sources(e); });
+		this._sourceBinding = _.find(this._bindings, function(binding) { return binding.sources(e); });
 
 		// If no binding claimed the event, then do nothing
-		if(null == _sourceBinding)
+		if(null == this._sourceBinding)
 			return;
 
-		_model.set(_sourceBinding.read(_model));	
+		this._model.set(this._sourceBinding.read(this._model));	
 
-		_sourceBinding = null;
+		this._sourceBinding = null;
 	};
 
-	function _onModelChange(e) {
-		_.each(_bindings, function(binding) {
-			if(_sourceBinding !== binding) {
-				binding.write(_model);
+	Binder.prototype._onModelChange = function(e) {
+		_.each(this._bindings, function(binding) {
+			if(this._sourceBinding !== binding) {
+				binding.write(this._model);
 			}
-		});
+		}, this);
 	};
 
-	this.bind = function bind(model, element) {
+	Binder.prototype.bind = function(model, element) {
 		if(!(null != model)) throw 'model must be specified';
 		if(!_.isElement(element)) throw 'invalid element';
-		if(_bound) throw 'Binder has already been bound';
+		if(this._bound) throw 'Binder has already been bound';
 
-		_bound = true;
-		_model = model;
-		_element = element;
-		_bindings = BindingHelpers.CreateBindingsForElement(_element);
+		this._bound = true;
+		this._model = model;
+		this._element = element;
+		this._bindings = BindingHelpers.CreateBindingsForElement(element);
 
-		_model.on('change', _onModelChange, this);
-		$(_element).on(BindingHelpers.DOM_EVENTS.join(' '), _onDomEvent);
+		this._model.on('change', this._onModelChange, this);
+		$(this._element).on(BindingHelpers.DOM_EVENTS.join(' '), this._domEventHook);
 
-		_.each(_bindings, function(binding) {
-			binding.write(_model);
-		});
+		_.each(this._bindings, function(binding) {
+			binding.write(this._model);
+		}, this);
 	};
 
-	this.unbind = function unbind() {
-		_model.off('change', _onModelChange, this);
-		$(_element).off(BindingHelpers.DOM_EVENTS.join(' '), _onDomEvent);
+	Binder.prototype.unbind = function() {
+		$(this._element).off(BindingHelpers.DOM_EVENTS.join(' '), this._domEventHook);
+		this._model.off('change', this._onModelChange, this);
 
-		_bindings = [ ];
-		_element = null;
-		_model = null;
+		this._bindings = [ ];
+		this._element = null;
+		this._model = null;
 	};
-};
+
+	return Binder;
+})();
 
 })(_, jQuery);
