@@ -344,8 +344,9 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 			var bindingConfiguration = getElementBindingConfiguration(element, defaultBindingConfigurations);
 			if(bindingConfiguration) {
 				var selectedBinder = _.find(binders, function(binder) { return binder.binds(element); });
-				if(selectedBinder)
-					return [ selectedBinder.bind(element, bindingConfiguration) ];
+				if(!selectedBinder) throw 'no binder binds element ' + element.tagName;
+
+				return [ selectedBinder.bind(element, bindingConfiguration) ];
 			}
 
 			var bindings = [ ];
