@@ -174,7 +174,7 @@ __module__.TemplateBinding = TemplateBinding = function(node, defaultBindingConf
 		var match;
 		while(match = BindingHelpers.TEMPLATE_PATTERN.exec(node.nodeValue)) {
 			var attributeName = match[1];
-			_templateAttributes[attributeName] = defaultBindingConfigurations[attributeName] || { };		
+			_templateAttributes[attributeName] = defaultBindingConfigurations['@' + attributeName] || { };		
 		}
 	})();	
 
@@ -304,7 +304,7 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 		configuration.events || (configuration.events = ['change']);
 	};
 
-	var getElementBindingConfiguration = function(element, defaultConfigurations) {
+	var getElementBindingConfiguration = function(element, defaults) {
 		if(!_.isElement(element)) throw 'invalid element';
 		
 		var declaredConfiguration = getDeclaredElementBindingConfiguration(element);
@@ -313,9 +313,9 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 			return null;
 
 		var attributeName = declaredConfiguration.attribute;
-		var defaultConfiguration = defaultConfigurations[attributeName];
+		var attributeDefaults = defaults['@' + attributeName];
 
-		var configuration = _.defaults(_.clone(declaredConfiguration), defaultConfiguration);
+		var configuration = _.defaults(_.clone(declaredConfiguration), attributeDefaults);
 
 		processElementBindingConfiguration(configuration);
 
