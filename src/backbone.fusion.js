@@ -29,6 +29,7 @@ var
 	Binding,
 	BindingHelpers,
 	BooleanCheckboxInputBinding,
+	BindingConfiguration,
 	ElementBinding,
 	Formats,
 	FormattedElementBinding,
@@ -76,6 +77,107 @@ __module__.Formats = Formats = {
 	}
 };
 
+__module__.BindingConfiguration = BindingConfiguration = (function() {
+
+	function BindingConfiguration(defaults) {
+		this._defaults = defaults || { };
+		if(!_.isObject(this._defaults)) throw 'invalid defaults';
+	}
+
+	var ops = {
+		$reset: function(param, target) {
+			if(_.isArray(param)) {
+				// { $reset: [ '@att1', '@att2' ] } -> reset defaults for multiple keys
+				_.each(param, function(p) { target = ops.$reset(p, target); });
+			} else if(_.isString(param)) {
+				// { $reset: '@att' } -> reset defaults for specified key
+				delete target[param];
+			} else if(param) {
+				// { $reset: true } -> reset all defaults
+				target = { };	
+			} else {
+				throw 'invalid $reset param';
+			}
+			return target;
+		}
+	};
+
+	function _isOperator(k) { return '$' === k.charAt(0); } 
+	function _isAttribute(k) { return '@' === k.charAt(0); }
+	function _isValue(k) { return !(_isAttribute(k) || _isOperator(k)); }
+
+	function _applyOperators(target, source) {
+		_.each(source, function(param, opName) {
+			if(!_isOperator(opName)) return;
+			var op = ops[opName];
+			if(!op) throw 'invalid operator: ' + opName.toString();
+			target = op(param, target);
+		});
+		return target;
+	}
+
+	function _applyValues(target, source) {
+		_.each(source, function(value, key) {
+			if(!_isValue(key)) return;
+
+			if('format' === key && _.isString(value)) {
+				var namedFormat = Formats[value];
+				if(!namedFormat) throw 'invalid named format "' + value + '"';
+				value = namedFormat;
+			}
+
+			target[key] = value;
+		});
+	}
+
+	function _applyAttributes(target, source) {
+		_.each(source, function(s, key) {
+			if(!_isAttribute(key)) return;
+			var t = target[key] || { };
+			t = _applyOperators(t, s); 
+			_applyValues(t, s);
+			target[key] = t;
+		});
+	}
+
+	function _apply(target, source) {
+		target = _applyOperators(target, source);
+		_applyAttributes(target, source);
+		_applyValues(target, source);
+		return target;
+	};
+
+	BindingConfiguration.prototype.raw = function() {
+		return this._defaults;
+	};
+
+	BindingConfiguration.prototype.merge = function(other) {
+		if(!_.isObject(other)) throw 'invalid other';
+
+		var merged = { };
+		merged = _apply(merged, this._defaults);
+		merged = _apply(merged, other);
+
+		return new BindingConfiguration(merged);
+	};
+
+	BindingConfiguration.prototype.get = function(attributeName) {
+		if(!_.isString(attributeName)) throw 'invalid attributeName';
+		
+		var configuration = { };
+		// Apply global defaults
+		_applyValues(configuration, this._defaults);
+		// Apply attribute-specific defaults
+		var attributeConfiguration = this._defaults['@' + attributeName];
+		if(attributeConfiguration)
+			_applyValues(configuration, attributeConfiguration);
+
+		return new BindingConfiguration(configuration);
+	};
+
+	return BindingConfiguration;
+})();
+
 __module__.Binding = Binding = (function() {
 	function Binding() { } 
 	Binding.prototype.read = function(model) { throw 'not implemented'; };
@@ -95,11 +197,12 @@ __module__.ElementBinding = ElementBinding = (function() {
 
 		this._element = element;
 		this._configuration = configuration;
+		this._defaultEvents = ['change'];
 	}
 
 	ElementBinding.prototype.sources = function(e) {
-		if(null == e) throw 'null event';
-		return this._element === e.target && _.contains(this._configuration.events, e.type);
+		return e.target === this._element
+			&& _.contains(this._configuration.events || this._defaultEvents, e.type);
 	};
 
 	return ElementBinding;
@@ -273,100 +376,30 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 		}	
 	];
 
-	var getDeclaredDefaultBindingConfigurations = function(element) {
+	function _getDeclaredConfigurationDefaults(element) {
 		if(!element.hasAttribute(BINDING_DEFAULTS_ATTRIBUTE))
 			return null;
 
 		var declaredString = element.getAttribute(BINDING_DEFAULTS_ATTRIBUTE);
-		var declared  = (function() {
+		return (function() {
 			try { return eval('({' + declaredString + '})'); }
 			catch (ex) { throw 'error evaluating ' + BINDING_DEFAULTS_ATTRIBUTE + ' "' + declaredString + '"'; }
 		})();	
-
-		_.each(declared, function(d) {
-			// TODO: should this have its own implementation?
-			processElementBindingConfiguration(d);
-		});
-
-		return declared;
 	}
 
-	var getEffectiveDefaultBindingConfigurations = function(inherited, declared) {
-		if(!declared) return inherited;
-
-		var effective = { }; 
-		// Second level copy of inherited to effective
-		_.each(inherited, function(inheritedDefaults, inheritedName) {
-			effective[inheritedName] = _.clone(inheritedDefaults);
-		});
-
-		// Second level copy of declared over effective
-		_.each(declared, function(declaredDefaults, declaredName) {
-			var effectiveDefaults = effective[declaredName] || (effective[declaredName] = { });
-			_.extend(effectiveDefaults, declaredDefaults);
-		});
-		return effective;
-	};
-
-	var getDefaultBindingConfigurations = function(element, inherited) {
-		// TODO: global defaults ala { events: ['keyup'], '@attname':{ format: 'money' } }
-		// TODO: operators, e.g. { $reset: true } -> clear defaults, { '@attname': { $reset: true } }
-		if(!_.isElement(element)) throw 'invalid element';	
-		if(!_.isObject(inherited)) throw 'invalid inherited';
-
-		var declared = getDeclaredDefaultBindingConfigurations(element);
-
-		if(!declared)
-			return inherited;
-
-		return getEffectiveDefaultBindingConfigurations(inherited, declared);
-	};
-
-	var getDeclaredElementBindingConfiguration = function(element) {
+	function _getDeclaredConfiguration(element) {
 		if(!element.hasAttribute(BINDING_ATTRIBUTE))
 			return null;
 
-		var declaredString = element.getAttribute(BINDING_ATTRIBUTE);
-		if(!!~(declaredString.indexOf(':'))) {
-			try { return eval('({' + declaredString + '})'); }
-			catch (ex) { throw 'error evaluating ' + BINDING_ATTRIBUTE + ' "' + declaredString + '"'; }
-		} else {
-			return { attribute: declaredString };
-		}
-	}
-
-	var processElementBindingConfiguration = function(configuration) {
-		if(configuration.format) {
-			if(_.isString(configuration.format)) {
-				var namedFormat = Formats[configuration.format];
-				if(!_.isFunction(namedFormat))
-					throw 'invalid named format "' + configuration.format + '"';
-				configuration.format = namedFormat;	
-			}
-			if(!_.isFunction(configuration.format))
-				throw 'invalid format';
-		}
-
-		configuration.events || (configuration.events = ['change']);
-	};
-
-	var getElementBindingConfiguration = function(element, defaults) {
-		if(!_.isElement(element)) throw 'invalid element';
+		var attributeValue = element.getAttribute(BINDING_ATTRIBUTE);
+		if(!~attributeValue.indexOf(':'))
+			return { attribute: attributeValue };
 		
-		var declaredConfiguration = getDeclaredElementBindingConfiguration(element);
-
-		if(!declaredConfiguration)
-			return null;
-
-		var attributeName = declaredConfiguration.attribute;
-		var attributeDefaults = defaults['@' + attributeName];
-
-		var configuration = _.defaults(_.clone(declaredConfiguration), attributeDefaults);
-
-		processElementBindingConfiguration(configuration);
-
-		return configuration;
-	};
+		return (function() {
+			try { return eval('({' + attributeValue + '})'); }
+			catch (ex) { throw 'error evaluating ' + BINDING_ATTRIBUTE + ' "' + attributeValue + '"'; }
+		})();
+	}
 
 	var isTemplatedNode = function(node) {
 		return null != node.nodeValue && !!node.nodeValue.match(BindingHelpers.TEMPLATE_PATTERN);
@@ -382,35 +415,42 @@ __module__.BindingHelpers = BindingHelpers = (function() {
 			'resize', 'scroll', 'select', 'submit', 'toggle'
 		],
 
-		CreateBindingsForElement: function(element, inheritedDefaultBindingConfigurations) {
+		CreateBindingsForElement: function(element, inheritedDefaults) {
 			if(!_.isElement(element)) throw 'invalid element';
 
-			var defaultBindingConfigurations = getDefaultBindingConfigurations(element, inheritedDefaultBindingConfigurations || { });
+			var effectiveDefaults = (inheritedDefaults || new BindingConfiguration());
+			var declaredDefaults = _getDeclaredConfigurationDefaults(element);
+			if(declaredDefaults)
+				effectiveDefaults = effectiveDefaults.merge(declaredDefaults);
 
-			var bindingConfiguration = getElementBindingConfiguration(element, defaultBindingConfigurations);
-			if(bindingConfiguration) {
-				var selectedBinder = _.find(binders, function(binder) { return binder.binds(element); });
-				if(!selectedBinder) throw 'no binder binds element ' + element.tagName;
+			var declaredConfiguration = _getDeclaredConfiguration(element);
+			if(declaredConfiguration) {
+				var binder = _.find(binders, function(b) { return b.binds(element); });
+				if(!binder) throw 'no binder binds element ' + element.tagName;
 
-				return [ selectedBinder.bind(element, bindingConfiguration) ];
+				var effectiveConfiguration = effectiveDefaults
+					.get(declaredConfiguration.attribute)
+					.merge(declaredConfiguration);
+
+				return [ binder.bind(element, effectiveConfiguration.raw()) ];
 			}
 
 			var bindings = [ ];
 
 			_.each(element.attributes, function(attributeNode) {
 				if(isTemplatedNode(attributeNode))
-					bindings.push(new TemplateBinding(attributeNode, defaultBindingConfigurations));
+					bindings.push(new TemplateBinding(attributeNode, effectiveDefaults.raw()));
 			});
 
 			_.each(element.childNodes, function(childNode) {
 				switch(childNode.nodeType) {
 					case Node.ELEMENT_NODE:
-						_.chain(BindingHelpers.CreateBindingsForElement(childNode, defaultBindingConfigurations))
+						_.chain(BindingHelpers.CreateBindingsForElement(childNode, effectiveDefaults))
 							.each(function(childBinding) { bindings.push(childBinding); });
 						break;
 					case Node.TEXT_NODE:
 						if(isTemplatedNode(childNode))
-							bindings.push(new TemplateBinding(childNode, defaultBindingConfigurations));
+							bindings.push(new TemplateBinding(childNode, effectiveDefaults.raw()));
 						break;
 				}
 			});
