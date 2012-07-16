@@ -25,24 +25,24 @@ describe('Backbone.Fusion.BindingConfiguration', function() {
 		});
 		it('should merge attribute configuration', function() {
 			expect(configuration
-				.merge({'@name':{format:'text'}})
-				.merge({'@age':{format:'integer'}})
+				.merge({'@name':{some:'value'}})
+				.merge({'@age':{another:'value'}})
 				.raw()
-			).toEqual({'@name':{format:'text'}, '@age':{format:'integer'}});
+			).toEqual({'@name':{some:'value'}, '@age':{another:'value'}});
 		});
 		it('should replace existing attribute configuration', function() {
 			expect(configuration
-				.merge({'@age':{format:'positive-integer'}})
-				.merge({'@age':{format:'non-negative-integer'}})
+				.merge({'@age':{events:['keyup']}})
+				.merge({'@age':{events:['change']}})
 				.raw()
-			).toEqual({'@age':{format:'non-negative-integer'}});
+			).toEqual({'@age':{events:['change']}});
 		});
 		it('should combine attribute configuration', function() {
 			expect(configuration
-				.merge({'@name':{format:'text'}})
-				.merge({'@name':{events:['change','keyup']}})
+				.merge({'@name':{some:'value'}})
+				.merge({'@name':{other:'value'}})
 				.raw()
-			).toEqual({'@name':{format:'text', events:['change','keyup']}});
+			).toEqual({'@name':{some:'value', other:'value' }});
 		});
 		describe('operator', function() {
 			it('should throw on invalid operator', function() {
@@ -97,24 +97,24 @@ describe('Backbone.Fusion.BindingConfiguration', function() {
 	describe('get()', function() {
 		it('should get configuration specified for the provided attribute name', function() {
 			expect(configuration
-				.merge({ '@name': { format: 'text' } })
+				.merge({ '@name': { some:'value' } })
 				.get('name')
 				.raw()
-			).toEqual({ format: 'text' });
+			).toEqual({ some: 'value' });
 		});
 		it('should include global configuration with attribute configuration', function() {
 			expect(configuration
-				.merge({ format: 'text', '@name': { events: ['change', 'keyup'] } })
+				.merge({ global: 'value', '@name': { attribute:'value'  } })
 				.get('name')
 				.raw()
-			).toEqual({ format: 'text', events: ['change', 'keyup'] });
+			).toEqual({ global: 'value', attribute: 'value' });
 		});
 		it('should prefer attribute configuration to global configuration', function() {
 			expect(configuration
-				.merge({ format: 'text', '@age': { format: 'positive-integer' }})
+				.merge({ value:'global', '@age':{value:'attribute-specific'}})
 				.get('age')
 				.raw()
-			).toEqual({ format: 'positive-integer' });
+			).toEqual({ value:'attribute-specific' });
 		});
 	});
 });
